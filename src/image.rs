@@ -120,7 +120,6 @@ impl ImageClient {
         let mut client =
             PullClient::new(image_url, &self.config.work_dir.join("layers"), auth_info)?;
         let (image_manifest, image_digest, image_config) = client.pull_manifest().await?;
-
         let id = image_manifest.config.digest.clone();
         if self.meta_store.lock().await.image_db.contains_key(&id) {
             return Ok(id);
