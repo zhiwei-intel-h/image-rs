@@ -44,6 +44,7 @@ impl Snapshotter for OverLay {
             overlay_workdir.display()
         );
 
+        println!("{:#?} {:#?} {:#?} {:#?} {:#?}", source, mount_path, fs_type.as_str(), flags, options.as_str());
         nix::mount::mount(
             Some(source),
             mount_path,
