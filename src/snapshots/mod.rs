@@ -7,18 +7,21 @@ use serde::Deserialize;
 use std::path::{Path, PathBuf};
 
 pub mod overlay;
+pub mod unionfs;
 
 /// Snapshot types.
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "lowercase")]
 pub enum SnapshotType {
     Overlay,
+    UnionFS,
 }
 
 impl std::fmt::Display for SnapshotType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let out = match self {
             Self::Overlay => "overlay",
+            Self::UnionFS => "unionfs",
         };
 
         write!(f, "{}", out)

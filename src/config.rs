@@ -33,6 +33,7 @@ impl Default for ImageConfig {
         ImageConfig {
             work_dir,
             default_snapshot: SnapshotType::Overlay,
+            //default_snapshot: SnapshotType::UnionFS,
         }
     }
 }
