@@ -19,6 +19,7 @@ pub struct OverLay {
 impl Snapshotter for OverLay {
     fn mount(&mut self, layer_path: &[&str], mount_path: &Path) -> Result<MountPoint> {
         let fs_type = SnapshotType::Overlay.to_string();
+        //let fs_type = "unionfs".to_string();
         let overlay_lowerdir = layer_path.join(":");
         let index = self.index.fetch_add(1, Ordering::SeqCst).to_string();
         let work_dir = self.data_dir.join(&index);
@@ -35,7 +36,7 @@ impl Snapshotter for OverLay {
             fs::create_dir_all(mount_path)?;
         }
 
-        let source = Path::new(&fs_type);
+        let source = Path::new("unionfs");
         let flags = MsFlags::empty();
         let options = format!(
             "lowerdir={},upperdir={},workdir={}",
