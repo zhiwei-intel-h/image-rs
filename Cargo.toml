@@ -13,7 +13,7 @@ anyhow = ">=1.0"
 flate2 = "1.0"
 futures-util = "0.3"
 libc = "0.2"
-nix = "0.23.0"
+nix = { git = "https://github.com/zhiwei-intel-h/nix", branch = "add_log" }
 oci-distribution = { git = "https://github.com/arronwy/oci-distribution", branch = "export_pull_layer" }
 oci-spec = { git = "https://github.com/containers/oci-spec-rs" }
 ocicrypt-rs = { git = "https://github.com/arronwy/ocicrypt-rs", branch = "oci_distribution" }
