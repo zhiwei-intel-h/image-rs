@@ -12,6 +12,8 @@ use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
+use std::fs;
+
 use crate::bundle::{create_runtime_config, BUNDLE_ROOTFS};
 use crate::config::ImageConfig;
 use crate::decoder::Compression;
@@ -180,6 +182,13 @@ impl ImageClient {
         if image_config.os() != &Os::Linux {
             return Err(anyhow!("unsupport OS image {:?}", image_config.os()));
         }
+
+
+        bundle_dir.join(BUNDLE_ROOTFS);
+        if !bundle_dir.exists() {
+            fs::create_dir_all(bundle_dir)?;
+        }
+
 
         create_runtime_config(&image_config, bundle_dir)?;
         let image_id = image_data.id.clone();

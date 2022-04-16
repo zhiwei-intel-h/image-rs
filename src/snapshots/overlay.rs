@@ -10,6 +10,16 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use crate::snapshots::{MountPoint, SnapshotType, Snapshotter};
 
+use std::fs::File;
+use std::io::Write;
+use std::io::Read;
+ 
+//-----
+use fs_extra;
+use fs_extra::dir;
+use fs_extra::error::*;
+//-----
+
 #[derive(Debug)]
 pub struct OverLay {
     pub data_dir: PathBuf,
@@ -22,11 +32,11 @@ impl Snapshotter for OverLay {
         fs::create_dir(mnt_target)?;
 
         let fs_type = String::from("unionfs");
-        let source = Path::new(&fs_type);
+        let source  = Path::new(&fs_type);
         let options = String::from("lowerdir=./rootfs/lower,upperdir=./rootfs/upper");
-        let flags = MsFlags::empty();
+        let flags   = MsFlags::empty();
 
-        println!("{:#?} {:#?} {:#?} {:#?} {:#?}", source, mount_path, fs_type, flags, options);
+        println!("{:#?} {:#?} {:#?} {:#?} {:#?}", source, mnt_target, fs_type, flags, options);
         nix::mount::mount(
             Some(source),
             mnt_target,
@@ -35,6 +45,62 @@ impl Snapshotter for OverLay {
             Some(options.as_str()),
         )?;
         println!("Mount done");
+
+        let create_file = mnt_target.join("foo.txt");
+        let mut file = File::create(create_file.as_path())?;
+        file.write_all(b"Hello, world!")?;
+        let mut file = File::open(create_file.as_path())?;
+        let mut contents = String::new();
+        file.read_to_string(&mut contents)?;
+        println!("{:#?}", contents);
+
+
+        //------------------
+        //let mut from_paths = Vec::new();
+        //from_paths.push(layer_path[0]);
+        //let options = dir::CopyOptions::new();
+        //let result = fs_extra::copy_items(&from_paths, &mnt_target, &options).unwrap();
+        
+        //let mut from_paths = Vec::new();
+        //let paths = fs::read_dir(mnt_target.to_str().unwrap()).unwrap();
+        //for path in paths {
+        //    println!("Name: {}", path.unwrap().path().display());
+        //    from_paths.push(path.path());
+        //}
+        //let result = fs_extra::copy_items(&from_paths, &mnt_target, &options).unwrap();
+
+        let options = dir::CopyOptions::new();
+        for layer_dir in layer_path {
+            let dirs = fs::read_dir(layer_dir).unwrap();
+            let mut from_paths = Vec::new();
+            for path in dirs {
+                println!("Name: {}", path.as_ref().unwrap().path().display());
+                from_paths.push(path.unwrap().path());
+            }
+            let result = fs_extra::copy_items(&from_paths, &mnt_target, &options).unwrap();
+        }
+        //let root_dir = layer_path.join("layers");
+        //println!("{:#?}", root_dir);
+        //let dirs = fs::read_dir(root_dir.as_str().unwrap()).unwrap();
+        //println!("dirs = {:#?}", dirs);
+
+        //for path in dirs{
+        //    let src_dir = root_dir.join(path);
+        //    println!("Name: {}", src_dir.unwrap().path().display());
+        //    let mut from_paths = Vec::new();
+        //    from_paths.push(src_dir.as_path());
+        //    let options = dir::CopyOptions::new();
+        //    let result = copy_items(&from_paths, &mnt_target, &options).unwrap();
+        //}
+        //-----------------
+
+
+
+        let paths = fs::read_dir(mnt_target.to_str().unwrap()).unwrap();
+        println!("paths = {:#?}",paths);
+        for path in paths {
+            println!("Name: {}", path.unwrap().path().display());
+        }
 
         Ok(MountPoint {
             r#type: fs_type,
