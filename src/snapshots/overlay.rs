@@ -31,28 +31,39 @@ impl Snapshotter for OverLay {
         let mnt_target = Path::new("/mnt_target");    
         fs::create_dir(mnt_target)?;
 
+        if !mount_path.exists() {
+            fs::create_dir_all(mount_path)?;
+        }
         let fs_type = String::from("unionfs");
         let source  = Path::new(&fs_type);
-        let options = String::from("lowerdir=./rootfs/lower,upperdir=./rootfs/upper");
+
+        let options = format!(
+            "lowerdir={},upperdir={},key={}",
+            "./rootfs/lower",
+            "./rootfs/upper",
+            "c7-32-b3-ed-44-df-ec-7b-25-2d-9a-32-38-8d-58-61"
+        );
+
+        //let options = String::from("lowerdir=./rootfs/lower,upperdir=./rootfs/upper,key=c7-32-b3-ed-44-df-ec-7b-25-2d-9a-32-38-8d-58-61");
         let flags   = MsFlags::empty();
 
-        println!("{:#?} {:#?} {:#?} {:#?} {:#?}", source, mnt_target, fs_type, flags, options);
+        println!("{:#?} {:#?} {:#?} {:#?} {:#?}", source, mount_path, fs_type, flags, options);
         nix::mount::mount(
             Some(source),
-            mnt_target,
+            mount_path,
             Some(fs_type.as_str()),
             flags,
             Some(options.as_str()),
         )?;
         println!("Mount done");
 
-        let create_file = mnt_target.join("foo.txt");
-        let mut file = File::create(create_file.as_path())?;
-        file.write_all(b"Hello, world!")?;
-        let mut file = File::open(create_file.as_path())?;
-        let mut contents = String::new();
-        file.read_to_string(&mut contents)?;
-        println!("{:#?}", contents);
+        //let create_file = mnt_target.join("foo.txt");
+        //let mut file = File::create(create_file.as_path())?;
+        //file.write_all(b"Hello, world!")?;
+        //let mut file = File::open(create_file.as_path())?;
+        //let mut contents = String::new();
+        //file.read_to_string(&mut contents)?;
+        //println!("{:#?}", contents);
 
 
         //------------------
@@ -77,7 +88,7 @@ impl Snapshotter for OverLay {
                 println!("Name: {}", path.as_ref().unwrap().path().display());
                 from_paths.push(path.unwrap().path());
             }
-            let result = fs_extra::copy_items(&from_paths, &mnt_target, &options).unwrap();
+            let result = fs_extra::copy_items(&from_paths, &mount_path, &options).unwrap();
         }
         //let root_dir = layer_path.join("layers");
         //println!("{:#?}", root_dir);
@@ -96,7 +107,7 @@ impl Snapshotter for OverLay {
 
 
 
-        let paths = fs::read_dir(mnt_target.to_str().unwrap()).unwrap();
+        let paths = fs::read_dir(mount_path.to_str().unwrap()).unwrap();
         println!("paths = {:#?}",paths);
         for path in paths {
             println!("Name: {}", path.unwrap().path().display());
