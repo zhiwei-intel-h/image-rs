@@ -17,6 +17,7 @@ use crate::signatures;
 
 use crate::policy::ref_match::PolicyReferenceMatcher;
 use crate::policy::ErrorInfo;
+use crate::SignatureScheme;
 
 #[derive(EnumString, Display, Debug, PartialEq)]
 pub enum PolicyReqType {
@@ -41,10 +42,13 @@ pub enum KeyType {
 //   `signedBy`: there must be at least a signature of the image can be verified by the specific key.
 pub trait PolicyRequirement {
     fn is_image_allowed(&self, image: &mut image::Image) -> Result<()>;
+    fn signature_scheme(&self) -> Option<String> {
+        None
+    }
 }
 
-impl<'de> Deserialize<'de> for Box<dyn PolicyRequirement> {
-    fn deserialize<D>(deserializer: D) -> Result<Box<dyn PolicyRequirement>, D::Error>
+impl<'de> Deserialize<'de> for Box<dyn PolicyRequirement + Send> {
+    fn deserialize<D>(deserializer: D) -> Result<Box<dyn PolicyRequirement + Send>, D::Error>
     where
         D: Deserializer<'de>,
     {
@@ -55,7 +59,7 @@ impl<'de> Deserialize<'de> for Box<dyn PolicyRequirement> {
 struct PolicyRequirementVisitor;
 
 impl<'de> Visitor<'de> for PolicyRequirementVisitor {
-    type Value = Box<dyn PolicyRequirement>;
+    type Value = Box<dyn PolicyRequirement + Send>;
 
     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
         formatter.write_str("Unexpect policy requirement deserialize visit format")
@@ -112,10 +116,10 @@ impl<'de> Visitor<'de> for PolicyRequirementVisitor {
     }
 }
 
-impl TryFrom<&str> for Box<dyn PolicyRequirement> {
+impl TryFrom<&str> for Box<dyn PolicyRequirement + Send> {
     type Error = serde_json::Error;
     fn try_from(json_str: &str) -> Result<Self, Self::Error> {
-        serde_json::from_str::<Box<dyn PolicyRequirement>>(json_str)
+        serde_json::from_str::<Box<dyn PolicyRequirement + Send>>(json_str)
     }
 }
 
@@ -125,6 +129,8 @@ impl TryFrom<&str> for Box<dyn PolicyRequirement> {
 pub struct PolicyReqAccept {
     r#type: String,
 }
+
+unsafe impl Send for PolicyReqAccept {}
 
 impl PolicyRequirement for PolicyReqAccept {
     fn is_image_allowed(&self, _image: &mut image::Image) -> Result<()> {
@@ -138,6 +144,8 @@ impl PolicyRequirement for PolicyReqAccept {
 pub struct PolicyReqReject {
     r#type: String,
 }
+
+unsafe impl Send for PolicyReqReject {}
 
 impl PolicyRequirement for PolicyReqReject {
     fn is_image_allowed(&self, _image: &mut image::Image) -> Result<()> {
@@ -173,6 +181,8 @@ pub struct PolicyReqSignedBy {
     signed_identity: Option<Box<dyn PolicyReferenceMatcher>>,
 }
 
+unsafe impl Send for PolicyReqSignedBy {}
+
 impl PolicyRequirement for PolicyReqSignedBy {
     fn is_image_allowed(&self, image: &mut image::Image) -> Result<()> {
         let sigs = image.signatures()?;
@@ -199,6 +209,14 @@ impl PolicyRequirement for PolicyReqSignedBy {
             reject_reason
         )))
     }
+
+    fn signature_scheme(&self) -> Option<String> {
+        // FIXME: Now only support Simple Signing scheme, here is hardcoded.
+        //
+        // refer to the issue: https://github.com/confidential-containers/image-rs/issues/7
+        // refer to the design document PR: https://github.com/confidential-containers/image-rs/pull/6
+        Some(SignatureScheme::SimpleSigning.to_string())
+    }
 }
 
 impl PolicyReqSignedBy {
@@ -221,7 +239,13 @@ impl PolicyReqSignedBy {
         let pubkey_ring = if !self.key_data.is_empty() {
             base64::decode(&self.key_data)?
         } else {
-            fs::read(&self.key_path)?
+            fs::read(&self.key_path).map_err(|e| {
+                anyhow!(
+                    "Read SignedBy keyPath failed: {:?}, path: {}",
+                    e,
+                    &self.key_path
+                )
+            })?
         };
 
         // Verify the signature with the pubkey ring.

@@ -39,13 +39,15 @@ pub struct Policy {
     transports: HashMap<String, PolicyTransportScopes>,
 }
 
-pub type PolicyRequirements = Vec<Box<dyn PolicyRequirement>>;
+pub type PolicyRequirements = Vec<Box<dyn PolicyRequirement + Send>>;
 pub type PolicyTransportScopes = HashMap<String, PolicyRequirements>;
 
 impl Policy {
     // Parse the JSON file of policy (policy.json).
     pub fn from_file(file_path: &str) -> Result<Self> {
-        let policy_json_string = fs::read_to_string(file_path)?;
+        let policy_json_string = fs::read_to_string(file_path)
+            .map_err(|e| anyhow!("Read policy.json file failed: {:?}", e))?;
+
         let policy = serde_json::from_str::<Policy>(&policy_json_string)?;
         Ok(policy)
     }
@@ -68,6 +70,18 @@ impl Policy {
         }
 
         Ok(())
+    }
+
+    // Get the set of signature schemes that need to be verified of the image.
+    pub fn signature_schemes(&self, image: &image::Image) -> Vec<Option<String>> {
+        let mut schemes = Vec::new();
+        let reqs = self.requirements_for_image(&image);
+
+        for req in reqs.iter() {
+            schemes.push(req.signature_scheme());
+        }
+
+        schemes
     }
 
     // selects the appropriate requirements for the image from Policy.

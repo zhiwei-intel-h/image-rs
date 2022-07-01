@@ -11,9 +11,9 @@ use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::fs;
 
-// FIXME: Now, for Demo, the dir which the sigstore config files locate
-// is hardcoded.
-pub const SIGSTORE_CONFIG_DIR: &str = "/etc/containers/registries.d";
+// The reason for using the `/run` directory here is that in general HW-TEE,
+// the `/run` directory is mounted in `tmpfs`, which is located in the encrypted memory protected by HW-TEE.
+pub const SIGSTORE_CONFIG_DIR: &str = "/run/image-security/simple_signing/sigstore_config";
 
 // Format the sigstore name:
 // `image-repository@digest-algorithm=digest-value`
@@ -45,7 +45,9 @@ impl SigstoreConfig {
         let mut merged_config = SigstoreConfig::default();
         let yaml_extension = OsStr::new("yaml");
 
-        for entry in fs::read_dir(dir)? {
+        for entry in fs::read_dir(dir)
+            .map_err(|e| anyhow!("Read Sigstore config Dir failed: {:?}, path: {}", e, dir))?
+        {
             let entry = entry?;
             let path = entry.path();
             if path.is_dir() || path.extension() != Some(yaml_extension) {
@@ -143,7 +145,13 @@ pub fn get_sigs_from_specific_sigstore(sigstore_uri: url::Url) -> Result<Vec<Vec
     match sigstore_uri.scheme() {
         "file" => {
             let sigstore_dir_path = sigstore_uri.path().to_string();
-            for entry in fs::read_dir(sigstore_dir_path)? {
+            for entry in fs::read_dir(&sigstore_dir_path).map_err(|e| {
+                anyhow!(
+                    "Read Sigstore Dir failed: {:?}, path: {}",
+                    e,
+                    &sigstore_dir_path
+                )
+            })? {
                 let entry = entry?;
                 let path = entry.path();
                 if path.is_dir() {
@@ -152,7 +160,9 @@ pub fn get_sigs_from_specific_sigstore(sigstore_uri: url::Url) -> Result<Vec<Vec
                 let path_str = path
                     .to_str()
                     .ok_or(anyhow!("Unknown error: path parsed failed."))?;
-                let sig = fs::read(path_str)?;
+                let sig = fs::read(path_str).map_err(|e| {
+                    anyhow!("Read signature file failed: {:?}, path: {}", e, path_str)
+                })?;
                 res.push(sig);
             }
         }
