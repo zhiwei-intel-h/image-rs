@@ -110,3 +110,55 @@ fn decrypt_layer_data(
         Err(anyhow!("no decrypt config available"))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use oci_distribution::manifest::{OciDescriptor};
+    use std::collections::HashMap;
+    use futures::executor::block_on;
+    use sha2::Digest;
+    #[tokio::test]
+    async fn test_get_plaintext_layer() {
+        // set env
+        let config_dir = std::env!("CARGO_MANIFEST_DIR");
+        let keyprovider_config =
+            format!("{}/{}", config_dir, "test_data/ocicrypt_keyprovider_native.conf");
+        std::env::set_var("OCICRYPT_KEYPROVIDER_CONFIG", keyprovider_config);
+
+        // layer meta data
+        let mut hm = HashMap::new();
+        hm.insert(
+            "org.opencontainers.image.enc.keys.provider.attestation-agent".to_string(),
+            "eyJraWQiOiJudWxsIiwid3JhcHBlZF9kYXRhIjpbMTksMjEzLDk5LDE0OCwxMTYsMjQ1LDIxLDE1MCwyNDIsMTczLDE1MywyMCwxMTQsMTIwLDE4Miw3MCw1MywyNSwxODUsMTU3LDU4LDM2LDE3OSwyMDAsMjMwLDMwLDIwNyw5NCwyMTgsMTY1LDE4LDI0LDI5LDIwMCw0NSw2MywyOSwxODIsMTgzLDE5LDE3NSwxNiwyMDAsMzQsMTMsMTM1LDI0MCwyNDIsMTQ3LDg3LDI0NiwxMDksMTM3LDIzNCwxMjksMjE5LDg5LDExNSwxOTYsMzAsMjEsMzcsMTkyLDI0LDE1Nyw2OSwxMTMsMTU2LDE2MCwxMzgsNzAsMzAsMzksNDMsMTcyLDE2OSwyMiwxNTUsMjUsMjQyLDIwMSw5OCwyNTAsNzYsMTU5LDEyOSwxODcsNSwyMzMsMTYwLDEzMywxOTEsNjQsMTg2LDAsMjE0LDE0NSw2MiwxNzksMTQyLDEzOCwxMjksMTY1LDIwOCwyMDcsMjEyLDUsMTIxLDIzLDQ1LDEwOSwxMDksMTMwLDE1LDE0NywxMzcsMjAyLDQxLDQ2LDM2LDEwMSwxMCwxNzcsMjYsMjUyLDEzOCwyOSwxNzYsMjI1LDEzMCw2NywxNzcsMTc4LDMwLDEwNSw2MiwxNjYsMjAsMCwxNzEsMTA4LDE1LDE4MywyMTgsMTExLDE5MSwxOTIsOTksMTA1LDIyNywxMywxNjQsMTYsMTA0LDI0MSwyMDgsMTY3LDEzNiwyOSw0OSwyNSwxOTIsOTksOTUsNzcsMjI4LDQsMTIwLDE5NSwzNiwyMTcsNjIsMTIxLDIzNyw2MSwyMCwxMDgsODMsMTkxLDE1Myw2MCwzOCwxODMsMTk2LDg0LDE5NiwyOSwxNTgsODcsMTQ4LDExMCwxMzMsMTMzLDExOCwxOTUsMTM2LDE2NSwyMzksMTIwLDQ2LDE4NywxNjgsNDUsMTI3LDI0NCw2MywyMTksMTYsMTldLCJpdiI6WzM5LDIzOCw2MCw0NywyMDUsMTIwLDEwNSwxMTksMjIzLDg5LDQ1LDQ2XSwid3JhcF90eXBlIjoiYWVzLWdjbSJ9".to_string());
+        hm.insert(
+            "org.opencontainers.image.enc.pubopts".to_string(),
+            "eyJjaXBoZXIiOiJBRVNfMjU2X0NUUl9ITUFDX1NIQTI1NiIsImhtYWMiOiI1TXNZSUZoRWdZMGhHNk50MUs2YWZhaUFrRVptV01wcSttbU8xemJkcytFPSIsImNpcGhlcm9wdGlvbnMiOnt9fQ==".to_string());
+        let layer_od = OciDescriptor {
+            media_type: "application/vnd.oci.image.layer.v1.tar+encrypted".to_string(),
+            digest: "sha256:39d2a3d8983573da8c7d9367e515b29148cae3acadc456fa5b4ed78a0e184b4f".to_string(),
+            size: 3072,
+            annotations: Some(hm),
+            ..Default::default()
+        };
+
+
+        // layer data
+        let layer_data = std::fs::read(&"test_data/encrypted_layer").unwrap();
+
+        // dc
+        let dc = "provider:attestation-agent:sample_kbc::null";
+        // decryption
+        let decryptor = Decryptor::from_media_type(&layer_od.media_type);
+        let plaintext_layer = block_on(decryptor.get_plaintext_layer(&layer_od, layer_data, &dc)).unwrap();
+        //println!("{:#?}", plaintext_layer);
+
+        // verify digest
+        let digest = format!("{}:{:x}", "sha256", sha2::Sha256::digest(&plaintext_layer.as_slice()));
+        let decrypted_digest = "sha256:dfe7577521f0d1ad9f82862f3550e12a615fcb07319265a3d23e96f2f21f62ec".to_string();
+        assert_eq!(digest, decrypted_digest);
+    }
+
+
+
+}
